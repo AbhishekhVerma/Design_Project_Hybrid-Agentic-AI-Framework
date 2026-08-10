@@ -1,0 +1,25 @@
+# Python / Environment variables
+.env
+__pycache__/
+*.pyc
+
+# LaTeX temporary files
+docs/paper/*.aux
+docs/paper/*.log
+docs/paper/*.out
+docs/paper/*.fls
+docs/paper/*.fdb_latexmk
+docs/paper/*.synctex.gz
+docs/paper/*.bbl
+docs/paper/*.blg
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Local Arduino Secrets
+secrets.h
+
+# Excluded Directories
+docs/
+hardware/
