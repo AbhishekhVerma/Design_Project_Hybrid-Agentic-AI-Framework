@@ -83,11 +83,28 @@ async def run_multi_agent_cloud_pipeline(api_key):
         contents=orchestrator_prompt
     )
     
+    # Parse the LLM output to inject our deterministic IFC Safety Seal
+    try:
+        raw_json = orchestrator_response.text.strip()
+        payload_dict = json.loads(raw_json)
+        
+        # Calculate Information Flow Control (IFC) Safety Seal
+        # A simple deterministic hash proving the Edge Node authorized this exact dosage
+        dosage_int = int(dosage)
+        safety_seal = (dosage_int ^ 0xAA) + 0x55
+        safety_seal = safety_seal & 0xFF # Mask to 8-bit
+        
+        payload_dict["params"]["arguments"]["safety_seal"] = safety_seal
+        final_payload = json.dumps(payload_dict)
+    except Exception as e:
+        print(f"[ERROR] Failed to inject safety seal: {e}")
+        final_payload = orchestrator_response.text.strip()
+    
     end_time = time.time()
-    print(f"[Agent 3: Orchestrator] JSON-RPC Payload Generated.")
+    print(f"[Agent 3: Orchestrator] JSON-RPC Payload Generated with IFC Safety Seal.")
     print(f"--> Cloud Multi-Agent Reasoning Latency: {(end_time - start_time) * 1000:.2f} ms")
     
-    return orchestrator_response.text.strip()
+    return final_payload
 
 async def run_local_fallback_pipeline():
     """Offline Mode: Simulates EdgeShard falling back to a constrained local model which hallucinates."""
@@ -112,6 +129,10 @@ async def run_local_fallback_pipeline():
     print("\n[Local EdgeShard Model] Warning: Context window exceeded. Hallucination detected.")
     print(f"[Local EdgeShard Model] Prescribed Dosage: {hallucinated_dosage} units")
     
+    # Calculate IFC Safety Seal
+    safety_seal = (hallucinated_dosage ^ 0xAA) + 0x55
+    safety_seal = safety_seal & 0xFF
+    
     payload = {
         "jsonrpc": "2.0",
         "method": "call_tool",
@@ -119,7 +140,8 @@ async def run_local_fallback_pipeline():
             "name": "inject_medication",
             "arguments": {
                 "patient_id": 10,
-                "dosage": hallucinated_dosage
+                "dosage": hallucinated_dosage,
+                "safety_seal": safety_seal
             }
         },
         "id": 99

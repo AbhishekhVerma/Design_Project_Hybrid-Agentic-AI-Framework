@@ -110,32 +110,34 @@ String MCPServer::execute_tool(String tool_name, JsonObject parameters) {
 String MCPServer::tool_inject_medication(JsonObject parameters) {
     uint8_t patient_id = parameters["patient_id"] | 0;
     uint8_t dosage = parameters["dosage"] | 0;
+    uint8_t safety_seal = parameters["safety_seal"] | 0;
     
     // Semantic Degradation: Convert intent to DCP Byte-Array
     // Byte 0: Command (0x01 = Inject)
     // Byte 1: Target (Patient ID)
     // Byte 2: Value (Dosage)
     // Byte 3: Sequence ID
-    // Byte 4: CRC8
+    // Byte 4: Safety Seal (IFC)
+    // Byte 5: CRC8
     
     uint8_t command = 0x01;
     sequence_id++;
     
-    uint8_t dcp_payload[5] = {command, patient_id, dosage, sequence_id, 0};
-    dcp_payload[4] = calculate_crc8(dcp_payload, 4);
+    uint8_t dcp_payload[6] = {command, patient_id, dosage, sequence_id, safety_seal, 0};
+    dcp_payload[5] = calculate_crc8(dcp_payload, 5);
     
     // Transmit to Extreme Edge (STM32) via Serial2
-    Serial2.write(dcp_payload, 5);
+    Serial2.write(dcp_payload, 6);
     
     // Add prominent logging since jumper cables are missing
     Serial.println("\n==================================================");
     Serial.println(">>> SEMANTIC DEGRADATION SUCCESSFUL");
-    Serial.println(">>> JSON Intent translated to DCP Byte-Array.");
-    Serial.printf(">>> TX -> STM32: [ 0x%02X | 0x%02X | 0x%02X | 0x%02X | 0x%02X ]\n", 
-                  dcp_payload[0], dcp_payload[1], dcp_payload[2], dcp_payload[3], dcp_payload[4]);
+    Serial.println(">>> JSON Intent translated to 6-byte DCP Array (with IFC Seal).");
+    Serial.printf(">>> TX -> STM32: [ 0x%02X | 0x%02X | 0x%02X | 0x%02X | 0x%02X | 0x%02X ]\n", 
+                  dcp_payload[0], dcp_payload[1], dcp_payload[2], dcp_payload[3], dcp_payload[4], dcp_payload[5]);
     Serial.println("==================================================\n");
                   
-    return "Command delegated to Extreme Edge for safety validation.";
+    return "Command delegated to Extreme Edge for Formal Verification.";
 }
 
 String MCPServer::tool_toggle_led(JsonObject parameters) {
@@ -188,14 +190,17 @@ void MCPServer::run_tinyml_fallback() {
     uint8_t command = 0x01; // Inject
     sequence_id++;
     
-    uint8_t dcp_payload[5] = {command, patient_id, dosage, sequence_id, 0};
-    dcp_payload[4] = calculate_crc8(dcp_payload, 4);
+    // Calculate deterministic seal internally for tinyML fallback
+    uint8_t safety_seal = (dosage ^ 0xAA) + 0x55;
     
-    Serial2.write(dcp_payload, 5);
+    uint8_t dcp_payload[6] = {command, patient_id, dosage, sequence_id, safety_seal, 0};
+    dcp_payload[5] = calculate_crc8(dcp_payload, 5);
+    
+    Serial2.write(dcp_payload, 6);
     
     Serial.println("==================================================");
     Serial.println(">>> AUTONOMOUS TINYML ACTUATION TRIGGERED");
-    Serial.printf(">>> TX -> STM32: [ 0x%02X | 0x%02X | 0x%02X | 0x%02X | 0x%02X ]\n", 
-                  dcp_payload[0], dcp_payload[1], dcp_payload[2], dcp_payload[3], dcp_payload[4]);
+    Serial.printf(">>> TX -> STM32: [ 0x%02X | 0x%02X | 0x%02X | 0x%02X | 0x%02X | 0x%02X ]\n", 
+                  dcp_payload[0], dcp_payload[1], dcp_payload[2], dcp_payload[3], dcp_payload[4], dcp_payload[5]);
     Serial.println("==================================================\n");
 }
